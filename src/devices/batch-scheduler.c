@@ -25,11 +25,11 @@ typedef struct {
 	int priority;
 } task_t;
 
-struct lock *locked_thread;
-struct condition *conditionToGo[2];
-struct condition *conditionToGoPrio[2];
-int *waiters[2];     // the number of cars waiting to go in each direction
-int *waitersPrio[2];
+struct lock locked_thread;
+struct condition conditionToGo[2];
+struct condition conditionToGoPrio[2];
+int waiters[2];     // the number of cars waiting to go in each direction
+int waitersPrio[2];
 int runningTasks;
 int currentdirection;
 
@@ -142,16 +142,18 @@ void getSlot(task_t task)
 	taskPriority = task.priority;
 	lock_acquire(&locked_thread);
 	while
-	(				// FIXME check this later!
-				 (runningTasks == 3)
-			|| (runningTasks > 0 && currentdirection != taskDirection)
-			|| ((taskPriority == 0) && ((&waitersPrio[SENDER] > 0) || (&waitersPrio[RECEIVER] > 0)))
-			//|| ((waitersPrio[tastDirection] == 0) && (waitersPrio[!tastDirection] > 0))
+	(				
+					(runningTasks == 3)
+					||
+					(runningTasks > 0 && currentdirection != taskDirection)
+					||
+					((taskPriority == 0) && (waitersPrio[SENDER] > 0 || waitersPrio[RECEIVER] > 0) )
 
 	)
+			//|| ((waitersPrio[tastDirection] == 0) && (waitersPrio[!tastDirection] > 0))
 	{
 
-		if(taskPriority){ //Detta ger komplieringsfel, kan inte bara göra "->"
+		if(taskPriority){ //
 				waitersPrio[taskDirection]++;
 				//void cond_wait (struct condition *cond, struct lock *lock)
 				cond_wait(&conditionToGoPrio[taskDirection],&locked_thread);
@@ -192,7 +194,6 @@ void transferData(task_t task)
 {
     int timetowait = 15;//math.random(1,10);
 		timer_sleep(timetowait);
-
 }
 
 /* task releases the slot */
@@ -205,22 +206,20 @@ void leaveSlot(task_t task)
 		lock_acquire(&locked_thread);
 		// exit bus
 		runningTasks--;
-		if (&waitersPrio[taskDirection] > 0){
+		if (waitersPrio[taskDirection] > 0){
 			//void cond_signal (struct condition *cond, struct lock *lock)
-			cond_signal(conditionToGoPrio[currentdirection], locked_thread);
+			cond_signal(&conditionToGoPrio[currentdirection], &locked_thread);
 		}
-		else if (&waitersPrio[!taskDirection] > 0){
-			cond_signal(conditionToGoPrio[!currentdirection], locked_thread);
+		else if (waitersPrio[!taskDirection] > 0){
+			cond_signal(&conditionToGoPrio[!currentdirection], &locked_thread);
 		}
-
-		else if (&waiters[taskDirection] > 0){
-			cond_signal(conditionToGo[currentdirection], locked_thread);
+		else if (waiters[taskDirection] > 0){
+			cond_signal(&conditionToGo[currentdirection], &locked_thread);
 		}
-
-		else if (&waiters[!taskDirection] > 0){
-			cond_signal(conditionToGo[!currentdirection], locked_thread);
+		else if (waiters[!taskDirection] > 0){
+			cond_signal(&conditionToGo[!currentdirection], &locked_thread);
 		}else{
-		//void cond_broadcast (struct condition *cond, struct lock *lock)
+			//void cond_broadcast (struct condition *cond, struct lock *lock)
 		}
 		lock_release(&locked_thread);
 }
