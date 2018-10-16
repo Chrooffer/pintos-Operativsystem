@@ -14,6 +14,7 @@
 #define NORMAL 0
 #define HIGH 1
 
+
 /*
  *	initialize task with direction and priority
  *	call o
@@ -23,6 +24,15 @@ typedef struct {
 	int priority;
 } task_t;
 
+struct lock *lock_thread;
+condition * conditionToGo[2];
+condition * conditionToGoPrio[2];
+int * waiters[2];     // he number of cars waiting to go in each direction
+int * waitersPrio[2];
+int runningTasks;
+int currentdirection;
+
+
 void batchScheduler(unsigned int num_tasks_send, unsigned int num_task_receive,
         unsigned int num_priority_send, unsigned int num_priority_receive);
 
@@ -30,6 +40,7 @@ void senderTask(void *);
 void receiverTask(void *);
 void senderPriorityTask(void *);
 void receiverPriorityTask(void *);
+
 
 
 void oneTask(task_t task);/*Task requires to use the bus and executes methods below*/
@@ -41,14 +52,17 @@ void oneTask(task_t task);/*Task requires to use the bus and executes methods be
 
 /* initializes semaphores */
 void init_bus(void){
+//void lock_init (struct lock *lock)
+//void cond_init (struct condition *cond)
+			lock_init(&lock_thread);
+			cond_init(conditToGo[RECEIVER]);
+			cond_init(conditToGo[SENDER]);
+			cond_init(conditToGoPrio[RECEIVER]);
+			cond_init(conditToGoPrio[SENDER]);
 
     random_init((unsigned int)123456789);
 
-    msg("NOT IMPLEMENTED");
-    /* FIXME implement */
-
 }
-
 /*
  *  Creates a memory bus sub-system  with num_tasks_send + num_priority_send
  *  sending data to the accelerator and num_task_receive + num_priority_receive tasks
@@ -99,19 +113,15 @@ void oneTask(task_t task) {
 }
 
 
-/* task tries to get slot on the bus subsystem */
-void getSlot(task_t task)
-{
-    msg("NOT IMPLEMENTED");
-    /* FIXME implement */
-}
+
 
 /* task processes data on the bus send/receive */
 void transferData(task_t task)
 {
     //msg("NOT IMPLEMENTED");
     /* FIXME implement */
-		int timetowait = math.random(1,10);
+		int timetowait = 10;//math.random(1,10);
+		timer_sleep(timetowait);
 
 }
 
@@ -124,14 +134,34 @@ void leaveSlot(task_t task)
 
 
 
+/* task tries to get slot on the bus subsystem */
+void getSlot(task_t task)
+{
+	lock.acquire(lock_thread);
+	while ((runningTasks == 3) || (runningTasks > 0 && currentdirection != task->direction)){
 
+		if(task->priority){ //Detta ger komplieringsfel, kan inte bara göra "->"
+				waitersPrio[direction]++;
+				cond_wait(conditionToGoPrio[direction],lock_thread);
+				waitersPrio[direction]--;
+			}else{
+				waiters[direction]++;
+				cond_wait(conditionToGo[direction],lock_thread);
+				waiters[direction]--;
+			}
+
+	}
+	// get on the busTasks
+	runningTasks++;
+	currentdirection = direction;
+	lock.release();
+}
 
 /*
 ArriveBridge(int direction) {
 lock.acquire();
 // while can't get on the bridge, wait
-while ((cars == 3) ||
-(cars > 0 && currentdirection != direction)) {
+while ((cars == 3) || (cars > 0 && currentdirection != direction)) {
 waiters[direction]++;
 waitingToGo[direction].wait();
 waiters[direction]--;
