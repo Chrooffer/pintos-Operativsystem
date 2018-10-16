@@ -55,11 +55,13 @@ void oneTask(task_t task);/*Task requires to use the bus and executes methods be
 void init_bus(void){
 //void lock_init (struct lock *lock)
 //void cond_init (struct condition *cond)
-			lock_init(locked_thread);
-			cond_init(conditionToGo[RECEIVER]);
-			cond_init(conditionToGo[SENDER]);
-			cond_init(conditionToGoPrio[RECEIVER]);
-			cond_init(conditionToGoPrio[SENDER]);
+
+
+			lock_init(&locked_thread);
+			cond_init(&conditionToGo[RECEIVER]);
+			cond_init(&conditionToGo[SENDER]);
+			cond_init(&conditionToGoPrio[RECEIVER]);
+			cond_init(&conditionToGoPrio[SENDER]);
 
     random_init((unsigned int)123456789);
 
@@ -85,7 +87,7 @@ void batchScheduler(unsigned int num_tasks_send, unsigned int num_task_receive,
 			thread_create ("task_Send_noPrio",NORMAL, *senderTask,0);
 		}
 		for (i=0; i < (int)num_task_receive;i++){
-			thread_create ("task_Send_Prio",NORMAL, *receiverTask,0);
+			thread_create ("task_Receive_noPrio",NORMAL, *receiverTask,0);
 
 		}
 		for (i=0; i < (int)num_priority_send;i++){
@@ -138,7 +140,7 @@ void getSlot(task_t task)
 	int taskPriority;
 	taskDirection = task.direction;
 	taskPriority = task.priority;
-	lock_acquire(locked_thread);
+	lock_acquire(&locked_thread);
 	while
 	(				// FIXME check this later!
 				 (runningTasks == 3)
@@ -152,12 +154,12 @@ void getSlot(task_t task)
 		if(taskPriority){ //Detta ger komplieringsfel, kan inte bara göra "->"
 				waitersPrio[taskDirection]++;
 				//void cond_wait (struct condition *cond, struct lock *lock)
-				cond_wait(conditionToGoPrio[taskDirection],locked_thread);
+				cond_wait(&conditionToGoPrio[taskDirection],&locked_thread);
 				waitersPrio[taskDirection]--;
 			}else{
 				waiters[taskDirection]++;
 				//void cond_wait (struct condition *cond, struct lock *lock)
-				cond_wait(conditionToGo[taskDirection],locked_thread);
+				cond_wait(&conditionToGo[taskDirection],&locked_thread);
 				waiters[taskDirection]--;
 			}
 
@@ -165,7 +167,7 @@ void getSlot(task_t task)
 	// get on the busTasks
 	runningTasks++;
 	currentdirection = taskDirection;
-	lock_release(locked_thread);
+	lock_release(&locked_thread);
 }
 
 /*
@@ -200,7 +202,7 @@ void leaveSlot(task_t task)
 		int taskPriority;
 		taskDirection = task.direction;
 		taskPriority = task.priority;
-		lock_acquire(locked_thread);
+		lock_acquire(&locked_thread);
 		// exit bus
 		runningTasks--;
 		if (&waitersPrio[taskDirection] > 0){
@@ -220,7 +222,7 @@ void leaveSlot(task_t task)
 		}else{
 		//void cond_broadcast (struct condition *cond, struct lock *lock)
 		}
-		lock_release(locked_thread);
+		lock_release(&locked_thread);
 }
 
 /*
