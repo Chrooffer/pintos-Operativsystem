@@ -6,6 +6,7 @@
 #include "threads/malloc.h"
 #include "threads/synch.h"
 #include "threads/thread.h"
+#include "timer.h"
 #include "lib/random.h" //generate random numbers
 
 #define BUS_CAPACITY 3
@@ -24,11 +25,11 @@ typedef struct {
 	int priority;
 } task_t;
 
-struct lock *lock_thread;
-condition * conditionToGo[2];
-condition * conditionToGoPrio[2];
-int * waiters[2];     // he number of cars waiting to go in each direction
-int * waitersPrio[2];
+struct lock *locked_thread;
+struct condition *conditionToGo[2];
+struct condition *conditionToGoPrio[2];
+int *waiters[2];     // the number of cars waiting to go in each direction
+int *waitersPrio[2];
 int runningTasks;
 int currentdirection;
 
@@ -54,11 +55,11 @@ void oneTask(task_t task);/*Task requires to use the bus and executes methods be
 void init_bus(void){
 //void lock_init (struct lock *lock)
 //void cond_init (struct condition *cond)
-			lock_init(&lock_thread);
-			cond_init(conditToGo[RECEIVER]);
-			cond_init(conditToGo[SENDER]);
-			cond_init(conditToGoPrio[RECEIVER]);
-			cond_init(conditToGoPrio[SENDER]);
+			lock_init(locked_thread);
+			cond_init(conditionToGo[RECEIVER]);
+			cond_init(conditionToGo[SENDER]);
+			cond_init(conditionToGoPrio[RECEIVER]);
+			cond_init(conditionToGoPrio[SENDER]);
 
     random_init((unsigned int)123456789);
 
@@ -77,8 +78,23 @@ void init_bus(void){
 void batchScheduler(unsigned int num_tasks_send, unsigned int num_task_receive,
         unsigned int num_priority_send, unsigned int num_priority_receive)
 {
-    msg("NOT IMPLEMENTED");
-    /* FIXME implement */
+
+    int i;
+		for (i=0; i < (int)num_tasks_send;i++){
+			//tid_t thread_create (const char *name, int priority, thread func *func, void *aux)
+			thread_create ("task_Send_noPrio",NORMAL, *senderTask,0);
+		}
+		for (i=0; i < (int)num_task_receive;i++){
+			thread_create ("task_Send_Prio",NORMAL, *receiverTask,0);
+
+		}
+		for (i=0; i < (int)num_priority_send;i++){
+			thread_create ("task_Send_Prio",HIGH, *senderPriorityTask,0);
+		}
+		for (i=0; i < (int)num_priority_receive;i++){
+			thread_create ("task_Receive_Prio",HIGH, *receiverPriorityTask,0);
+		}
+
 }
 
 /* Normal task,  sending data to the accelerator */
@@ -114,52 +130,47 @@ void oneTask(task_t task) {
 
 
 
-
-/* task processes data on the bus send/receive */
-void transferData(task_t task)
-{
-    //msg("NOT IMPLEMENTED");
-    /* FIXME implement */
-		int timetowait = 10;//math.random(1,10);
-		timer_sleep(timetowait);
-
-}
-
-/* task releases the slot */
-void leaveSlot(task_t task)
-{
-    msg("NOT IMPLEMENTED");
-    /* FIXME implement */
-}
-
-
-
 /* task tries to get slot on the bus subsystem */
 void getSlot(task_t task)
 {
-	lock.acquire(lock_thread);
-	while ((runningTasks == 3) || (runningTasks > 0 && currentdirection != task->direction)){
 
-		if(task->priority){ //Detta ger komplieringsfel, kan inte bara göra "->"
-				waitersPrio[direction]++;
-				cond_wait(conditionToGoPrio[direction],lock_thread);
-				waitersPrio[direction]--;
+	int taskDirection;
+	int taskPriority;
+	taskDirection = task.direction;
+	taskPriority = task.priority;
+	lock_acquire(locked_thread);
+	while
+	(				// FIXME check this later!
+				 (runningTasks == 3)
+			|| (runningTasks > 0 && currentdirection != taskDirection)
+			|| ((taskPriority == 0) && ((&waitersPrio[SENDER] > 0) || (&waitersPrio[RECEIVER] > 0)))
+			//|| ((waitersPrio[tastDirection] == 0) && (waitersPrio[!tastDirection] > 0))
+
+	)
+	{
+
+		if(taskPriority){ //Detta ger komplieringsfel, kan inte bara göra "->"
+				waitersPrio[taskDirection]++;
+				//void cond_wait (struct condition *cond, struct lock *lock)
+				cond_wait(conditionToGoPrio[taskDirection],locked_thread);
+				waitersPrio[taskDirection]--;
 			}else{
-				waiters[direction]++;
-				cond_wait(conditionToGo[direction],lock_thread);
-				waiters[direction]--;
+				waiters[taskDirection]++;
+				//void cond_wait (struct condition *cond, struct lock *lock)
+				cond_wait(conditionToGo[taskDirection],locked_thread);
+				waiters[taskDirection]--;
 			}
 
 	}
 	// get on the busTasks
 	runningTasks++;
-	currentdirection = direction;
-	lock.release();
+	currentdirection = taskDirection;
+	lock_release(locked_thread);
 }
 
 /*
 ArriveBridge(int direction) {
-lock.acquire();
+lock_acquire();
 // while can't get on the bridge, wait
 while ((cars == 3) || (cars > 0 && currentdirection != direction)) {
 waiters[direction]++;
@@ -169,14 +180,52 @@ waiters[direction]--;
 // get on the bridge
 cars++;
 currentdirection = direction;
-lock.release();
+lock_release();
 }
 */
 
 
+/* task processes data on the bus send/receive */
+void transferData(task_t task)
+{
+    int timetowait = 15;//math.random(1,10);
+		timer_sleep(timetowait);
+
+}
+
+/* task releases the slot */
+void leaveSlot(task_t task)
+{
+		int taskDirection;
+		int taskPriority;
+		taskDirection = task.direction;
+		taskPriority = task.priority;
+		lock_acquire(locked_thread);
+		// exit bus
+		runningTasks--;
+		if (&waitersPrio[taskDirection] > 0){
+			//void cond_signal (struct condition *cond, struct lock *lock)
+			cond_signal(conditionToGoPrio[currentdirection], locked_thread);
+		}
+		else if (&waitersPrio[!taskDirection] > 0){
+			cond_signal(conditionToGoPrio[!currentdirection], locked_thread);
+		}
+
+		else if (&waiters[taskDirection] > 0){
+			cond_signal(conditionToGo[currentdirection], locked_thread);
+		}
+
+		else if (&waiters[!taskDirection] > 0){
+			cond_signal(conditionToGo[!currentdirection], locked_thread);
+		}else{
+		//void cond_broadcast (struct condition *cond, struct lock *lock)
+		}
+		lock_release(locked_thread);
+}
+
 /*
 ExitBridge() {
-lock.acquire();
+lock_acquire();
 // get off the bridge
 cars--;
 // if anybody wants to go the same direction, wake them
@@ -185,6 +234,6 @@ waitingToGo[currentdirection].signal();
 // else if empty, try to wake somebody going the other way
 else if (cars == 0)
 waitingToGo[1-currentdirection].broadcast();
-lock.release();
+lock_release();
 }
 */
