@@ -63,6 +63,7 @@ void init_bus(void){
 			cond_init(&conditionToGoPrio[RECEIVER]);
 			cond_init(&conditionToGoPrio[SENDER]);
 
+			runningTasks = 0;
     random_init((unsigned int)123456789);
 
 }
@@ -84,17 +85,17 @@ void batchScheduler(unsigned int num_tasks_send, unsigned int num_task_receive,
     int i;
 		for (i=0; i < (int)num_tasks_send;i++){
 			//tid_t thread_create (const char *name, int priority, thread func *func, void *aux)
-			thread_create ("task_Send_noPrio",NORMAL, *senderTask,0);
+			thread_create ("task_Send_noPrio",NORMAL, senderTask,0);
 		}
 		for (i=0; i < (int)num_task_receive;i++){
-			thread_create ("task_Receive_noPrio",NORMAL, *receiverTask,0);
+			thread_create ("task_Receive_noPrio",NORMAL, receiverTask,0);
 
 		}
 		for (i=0; i < (int)num_priority_send;i++){
-			thread_create ("task_Send_Prio",HIGH, *senderPriorityTask,0);
+			thread_create ("task_Send_Prio",NORMAL, senderPriorityTask,0);
 		}
 		for (i=0; i < (int)num_priority_receive;i++){
-			thread_create ("task_Receive_Prio",HIGH, *receiverPriorityTask,0);
+			thread_create ("task_Receive_Prio",NORMAL, receiverPriorityTask,0);
 		}
 
 }
@@ -138,11 +139,11 @@ void getSlot(task_t task)
 
 	int taskDirection;
 	int taskPriority;
+	lock_acquire(&locked_thread);
 	taskDirection = task.direction;
 	taskPriority = task.priority;
-	lock_acquire(&locked_thread);
 	while
-	(				
+	(
 					(runningTasks == 3)
 					||
 					(runningTasks > 0 && currentdirection != taskDirection)
@@ -201,9 +202,9 @@ void leaveSlot(task_t task)
 {
 		int taskDirection;
 		int taskPriority;
+		lock_acquire(&locked_thread);
 		taskDirection = task.direction;
 		taskPriority = task.priority;
-		lock_acquire(&locked_thread);
 		// exit bus
 		runningTasks--;
 		if (waitersPrio[taskDirection] > 0){
@@ -211,13 +212,13 @@ void leaveSlot(task_t task)
 			cond_signal(&conditionToGoPrio[currentdirection], &locked_thread);
 		}
 		else if (waitersPrio[!taskDirection] > 0){
-			cond_signal(&conditionToGoPrio[!currentdirection], &locked_thread);
+			cond_broadcast(&conditionToGoPrio[!currentdirection], &locked_thread);
 		}
 		else if (waiters[taskDirection] > 0){
 			cond_signal(&conditionToGo[currentdirection], &locked_thread);
 		}
 		else if (waiters[!taskDirection] > 0){
-			cond_signal(&conditionToGo[!currentdirection], &locked_thread);
+			cond_broadcast(&conditionToGo[!currentdirection], &locked_thread);
 		}else{
 			//void cond_broadcast (struct condition *cond, struct lock *lock)
 		}

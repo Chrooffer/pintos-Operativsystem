@@ -4,14 +4,15 @@
 			| 	THREADS      |
 			|   DESIGN DOCUMENT  |
 			+--------------------+
-				   
+
 ---- GROUP XX ----
 
 >> Fill in the group number, names and email addresses of your group members.
 
-FirstName LastName <email@domain.example>
-FirstName LastName <email@domain.example>
-FirstName LastName <email@domain.example>
+Christoffer Olsson <chol@chalmers.se>
+Kajsa Lenfors <lenfors@chalmers.se>
+
+
 
 ---- PRELIMINARIES ----
 
@@ -31,26 +32,56 @@ FirstName LastName <email@domain.example>
 >> `struct' member, global or static variable, `typedef', or
 >> enumeration.  Identify the purpose of each in 25 words or less.
 
+struct thread
+  {
+	// An integer that will receive time from OS start + sleep time,
+	// used to keep track when thread should wake up
+	int wakeup_time;
+	};
+
 ---- ALGORITHMS ----
 
 >> A2: Briefly describe what happens in a call to timer_sleep(),
 >> including the effects of the timer interrupt handler.
 
+The input ticks determents how long the process should sleep. Timer_sleep calls timer_ticks() to get a start value and calculates a
+wakeup time. Interrupt is then disabled and the thread is blocked until timer_interrupt() calls check_timer() to unblock the thread if the time has passed.
+
+
 >> A3: What steps are taken to minimize the amount of time spent in
 >> the timer interrupt handler?
+
+timer_interrupt() calls another function that uses thread_foreach() to loop through all threads to find threads ready to wakeup.
+
+
 
 ---- SYNCHRONIZATION ----
 
 >> A4: How are race conditions avoided when multiple threads call
 >> timer_sleep() simultaneously?
 
+Each thread keeps their own time when they should wake up, based on OS startup time +
+the time input into the sleep function.
+
+
 >> A5: How are race conditions avoided when a timer interrupt occurs
 >> during a call to timer_sleep()?
+
+Interrupts are disabled before a thread is blocked.
+Interrupts are then enagbled again afterwards.
+
+
 
 ---- RATIONALE ----
 
 >> A6: Why did you choose this design?  In what ways is it superior to
 >> another design you considered?
+
+thread_foreach was already doing a lot of the things we needed.
+We realized that we only needed to add a wakeuptime to the thread, which
+the sleeping function would set and thread_foreach could check when looping through the processes. We got help from the TAs and the
+hints in the assigment description to come up with this idea and we never considered another design.
+
 
 			    BATCH SCHEDULING
 			    ================
@@ -60,25 +91,81 @@ FirstName LastName <email@domain.example>
 >> `struct' member, global or static variable, semaphore, `typedef', or
 >> enumeration.  Identify the purpose of each in 25 words or less.
 
+
+	//Lock structure
+	struct lock locked_thread;
+
+	// Condition struct for non-priority tasks
+	struct condition conditionToGo[2];
+
+	// Condition struct for-priority tasks
+	struct condition conditionToGoPrio[2];
+
+	// The number non-priority of tasks waiting to go in each direction
+	int waiters[2];
+
+	// The number of priority tasks waiting to go in each direction
+	int waitersPrio[2];
+
+	// Integer to show how many tasks that are currently running
+	int runningTasks;
+
+	// Integer to show in which direction tasks are running, SEND or RECEIVE
+	int currentdirection;
+
+
+
 ---- SYNCHRONIZATION ----
 
 >> C1: How does your solution guarantee that no more that 3 tasks
 >> are using the bus in the same direction?
 
+We use an if case in getSlot() to make sure that maximum 3 task can enter
+the bus simultaneously, Otherwise they have to wait for a slot to open up.
+
+
 >> C2: What prevents tasks from opposite directions from using the
 >> bus simultaneously?
 
+In the same manner as above we added another if-statment in getSlot() to make sure that only
+task with currentdirection == taskDirection could get a slot on the bus.
+
+
 >> C3: How does your solution grant priority to high priority tasks over
 >> the waiting tasks in the same direction?
+
+We have seperate queues for priority and task. There is simply the order in
+which the code checks which queue has waiting tasks that makes sure that
+priority tasks will be signaled before a non-priority task, and that tasks
+with the same direction has higher priority than a task in the other direction.
+
 
 >> C4: How do you guarantee that despite having priority, high priority
 >> tasks do not start using the bus while there are still still using
 >> it in the oposite direction?
 
+We have ordered the wakeup in this manner:
+When a task leave the bus it checks
+1) any more priototy tasks in same direction?
+2) any more prioroty tasks in other direction?
+3) any more tasks in same direction?
+4) any more tasks in other direction?
+
+If there are prioroty task in the other direction getSlot() will make all other task wait
+insted of getting a slot (if there are no prioroty task left in current direction)
+and when the bus is empty the prioroty task will get a slot and direction is changed.
+
+
+
 ---- RATIONALE ----
 
->> C6: Why did you choose this design? Did you consider other design 
+>> C6: Why did you choose this design? Did you consider other design
 >> alternatives? In what ways is it superior to another design you considered?
+
+There is no real explicit reason for our choice of solution. We only considered
+between using semaphores and our solution, and we found that it would be simpler
+for us to use locks and monitor.
+
 
 
 			   SURVEY QUESTIONS (optional)
@@ -93,14 +180,32 @@ the quarter.
 >> In your opinion, was this assignment, or any one of the three problems
 >> in it, too easy or too hard?  Did it take too long or too little time?
 
+The first assigment with timer_wait was unclear to us and took many hours of not getting anywhere. We dident know how to start
+even if we read all the instructions many times.
+
+
 >> Did you find that working on a particular part of the assignment gave
 >> you greater insight into some aspect of OS design?
+
+Yes, concerning how the interrupt handler would always trigger every time to check
+if there was anything to interrupt with. (Which in my opinion makes it a good example
+of how the OS will always check the interrupt request line to se if anything wants
+to interrupt).
 
 >> Is there some particular fact or hint we should give students in
 >> future quarters to help them solve the problems?  Conversely, did you
 >> find any of our guidance to be misleading?
 
+Since we had the most problem with task 1, which mostly stemed from us not understanding
+how we were supposed to implement our thought out solution, we believe there should have been
+extra tips concerning some simple examples to help set the path.
+
+
 >> Do you have any suggestions for the TAs to more effectively assist
 >> students, either for future quarters?
 
+
+
 >> Any other comments?
+
+Very time-consuming labs.
